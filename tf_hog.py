@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-from tf_filters import tf_deriv
+from .tf_filters import *
 
 def tf_select_by_idx(a, idx, grayscale):
     if grayscale:
@@ -13,15 +13,15 @@ def tf_select_by_idx(a, idx, grayscale):
                                    a[:,:,:,0]))
     
 
-def tf_hog_descriptor(images, cell_size = 8, block_size = 2, block_stride = 1, n_bins = 9,
+def tf_hog_descriptor(images, cell_size=8, block_size=2, block_stride=1, n_bins=9,
                       grayscale = False):
 
     batch_size, height, width, depth = images.shape
+    batch_size = tf.shape(images)[0]
     scale_factor = tf.constant(180 / n_bins, name="scale_factor", dtype=tf.float32)
-    
-    img = tf.constant(images, name="ImgBatch", dtype=tf.float32)
 
-    if grayscale:
+    img = images
+    if grayscale and depth == 3:
         img = tf.image.rgb_to_grayscale(img, name="ImgGray")
 
     # automatically padding height and width to valid size (multiples of cell size)
@@ -37,18 +37,20 @@ def tf_hog_descriptor(images, cell_size = 8, block_size = 2, block_stride = 1, n
     
     # masking unwanted gradients of edge pixels
     mask_depth = 1 if grayscale else depth
-    g_x_mask = np.ones((batch_size, height, width, mask_depth))
-    g_y_mask = np.ones((batch_size, height, width, mask_depth))
+    g_x_mask = np.ones((1, height, width, mask_depth))
+    g_y_mask = np.ones((1, height, width, mask_depth))
     g_x_mask[:, :, (0, -1)] = 0
     g_y_mask[:, (0, -1)] = 0
     g_x_mask = tf.constant(g_x_mask, dtype=tf.float32)
     g_y_mask = tf.constant(g_y_mask, dtype=tf.float32)
+    g_x_mask = tf.tile(g_x_mask, [batch_size, 1, 1, 1])
+    g_y_mask = tf.tile(g_y_mask, [batch_size, 1, 1, 1])
     
     g_x = g_x*g_x_mask
     g_y = g_y*g_y_mask
 
     # maximum norm gradient selection
-    g_norm = tf.sqrt(tf.square(g_x) + tf.square(g_y), "GradNorm")
+    g_norm = tf.add(tf.abs(g_x), tf.abs(g_y), "GradNorm")
     
     if not grayscale and depth != 1:
         # maximum norm gradient selection
@@ -66,7 +68,7 @@ def tf_hog_descriptor(images, cell_size = 8, block_size = 2, block_stride = 1, n
 
     # cells histograms
     hist = list()
-    zero = tf.zeros(cell_bins.get_shape()) 
+    zero = tf.zeros_like(cell_bins, dtype=tf.float32) 
     for i in range(n_bins):
         mask = tf.equal(cell_bins, tf.constant(i, name="%i"%i))
         hist.append(tf.reduce_mean(tf.where(mask, cell_norm, zero), 3))
@@ -85,10 +87,10 @@ def tf_hog_descriptor(images, cell_size = 8, block_size = 2, block_stride = 1, n
     
     # HOG descriptor
     hog_descriptor = tf.reshape(block_hist, 
-                                [int(block_hist.get_shape()[0]), 
+                                [batch_size, 
                                  int(block_hist.get_shape()[1]) * \
                                  int(block_hist.get_shape()[2]) * \
                                  int(block_hist.get_shape()[3])], 
                                  name='HOGDescriptor')
 
-    return hog_descriptor, block_hist, hist
+    return hog_descriptor
