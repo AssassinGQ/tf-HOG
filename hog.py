@@ -1,6 +1,6 @@
 from keras import backend as K
-from keras.engine.topology import Layer
-from .tf_hog import tf_hog_descriptor
+from keras.layers import Layer
+from tf_hog import tf_hog_descriptor
 from math import ceil, floor
 
 class HOG(Layer):

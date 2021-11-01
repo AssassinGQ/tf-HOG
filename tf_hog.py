@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-from .tf_filters import *
+from tf_filters import *
 
 def tf_select_by_idx(a, idx, grayscale):
     if grayscale:
@@ -28,8 +28,9 @@ def tf_hog_descriptor(images, cell_size=8, block_size=2, block_stride=1, n_bins=
     if height % cell_size != 0 or width % cell_size != 0:
         height = height + (cell_size - (height % cell_size)) % cell_size
         width = width + (cell_size - (width % cell_size)) % cell_size
-        img = tf.image.resize_image_with_crop_or_pad(img, height, width)
-    
+        # img = tf.image.resize_image_with_crop_or_pad(img, height, width)
+        img = tf.image.resize(img, [height, width])
+
     # gradients
     grad = tf_deriv(img)
     g_x = grad[:,:,:,0::2]
@@ -60,11 +61,11 @@ def tf_hog_descriptor(images, cell_size=8, block_size=2, block_stride=1, n_bins=
         g_y    = tf.expand_dims(tf_select_by_idx(g_y,    idx, grayscale), -1)
 
     g_dir = tf_rad2deg(tf.atan2(g_y, g_x)) % 180
-    g_bin = tf.to_int32(g_dir / scale_factor, name="Bins")
+    g_bin = tf.compat.v1.to_int32(g_dir / scale_factor, name="Bins")
 
     # cells partitioning
-    cell_norm = tf.space_to_depth(g_norm, cell_size, name="GradCells")
-    cell_bins = tf.space_to_depth(g_bin,  cell_size, name="BinsCells")
+    cell_norm = tf.nn.space_to_depth(g_norm, cell_size, name="GradCells")
+    cell_bins = tf.nn.space_to_depth(g_bin,  cell_size, name="BinsCells")
 
     # cells histograms
     hist = list()
@@ -75,8 +76,8 @@ def tf_hog_descriptor(images, cell_size=8, block_size=2, block_stride=1, n_bins=
     hist = tf.transpose(tf.stack(hist), [1,2,3,0], name="Hist")
 
     # blocks partitioning
-    block_hist = tf.extract_image_patches(hist, 
-                                          ksizes  = [1, block_size, block_size, 1], 
+    block_hist = tf.image.extract_patches(hist,
+                                          sizes  = [1, block_size, block_size, 1],
                                           strides = [1, block_stride, block_stride, 1], 
                                           rates   = [1, 1, 1, 1], 
                                           padding = 'VALID',
